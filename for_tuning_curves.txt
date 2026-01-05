@@ -1,0 +1,85 @@
+for reward: 
+
+t_for_rw = -1 :0.1:3;
+>> trial1_cue1_dff_cell1 = interp1(frames_behav_time_vec,double(A{1}),log.block(3).trial(1).time(67,:)+t_for_rw);
+
+for cues:
+log.block.trial(1)
+ans = 
+ choice: R
+              collision: [540×1 logical]
+                comment: ''
+               cueCombo: [2×5 logical]
+              cueOffset: {[0 0 0 0 0]  [1×0 uint16]}
+               cueOnset: {[67 134 175 246 276]  [1×0 uint16]}
+                 cuePos: {[24.6830 43.9333 74.5984 129.3492 159.3776]  [1×0 single]}
+               duration: 15.8596
+           excessTravel: -0.0015
+              iArmEntry: 446
+              iCueEntry: 51
+              iMemEntry: 350
+             iterations: 540
+                newSync: [886×1 single]
+          newsyncvector: [0×1 single]
+               position: [540×3 single]
+            rewardScale: 1.5000
+             sensorDots: [886×2 int16]
+                  start: 0.4009
+                   time: [886×1 single]
+                trialID: -1
+              trialProb: 0.5000
+              trialType: L
+               velocity: [540×3 single]
+                viStart: 2
+    virmen_cputime_sync: [1.0955e+05 16.2606]
+t_for_cues = -1:1:3;
+for k=1:length(A)
+cur_dff = gather(A{k}(:)); %because A is a gpuArray and we convert it to cpu
+left_cue_responses_neuron2=[];
+for trlctr=6:length(log.block(3).trial)
+numcuesLeft = length(log.block(3).trial(trlctr).cueOnset{1});
+for cuectr = 1:numcuesLeft
+cueAppearTime = log.block(3).trial(trlctr).time(log.block(3).trial(trlctr).cueOnset{1}(cuectr))+log.block(3).trial(trlctr).start;
+left_cue_responses_neuron2(end+1,:)= interp1(frames_behav_time_vec(1:2:end),cur_dff,cueAppearTime+t_for_cues); %downsampling frames_behav_time_vec to match dff length
+end
+end
+errorbar(t_for_cues,mean(left_cue_responses_neuron2),std(left_cue_responses_neuron2)/sqrt(size(left_cue_responses_neuron2,1)));shg
+title(['Left cue response, neuron ',num2str(k)])
+pause
+end
+errorbar(t_for_cues,mean(left_cue_responses_neuron2),std(left_cue_responses_neuron2)/sqrt(size(left_cue_responses_neuron2,1)));shg
+title(['Left cue response, neuron ',num2str(k)])
+pause
+end
+
+
+%%%% 
+ # 03/06/25
+
+frames_2p_time_vec_ds = frames_2p_time_vec(1:2:end);
+for trialctr = 1:length(rw_times)
+current_reward_time = rw_times(trialctr);
+cur_t_axis = t_axis + current_reward_time;
+for cellctr = 1:length(A)
+Activity_around_reward_2p(trialctr,:,cellctr) = interp1(frames_2p_time_vec_ds,A{cellctr},cur_t_axis);
+end
+end
+successful_trials = [log.block.trial.trialType]==[log.block.trial.choice];
+for l=1:25
+clf;hold on;plot(t_axis,mean(Activity_around_reward(successful_trials==1,:,l)));plot(t_axis,mean(Activity_around_reward_2p(:,:,l)),'--');shg;pause
+end
+hold on
+for l=1:length(rw_times)
+[~,minind] = min(abs(rw_times(l)-frames_2p_time_vec_ds));
+rw_inds(l) = minind;
+end
+plot(frames_2p_time_vec_ds,A{2});shg
+plot(rw_times,A{2}(rw_inds),'r*');shg
+clf
+plot(frames_2p_time_vec_ds,A{2});shg
+plot(rw_times,A{2}(rw_inds),'r*');shg
+clf
+hold on
+plot(frames_2p_time_vec_ds,A{2});shg
+plot(rw_times,A{2}(rw_inds),'r*');shg
+

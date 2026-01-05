@@ -1,0 +1,54 @@
+#ignore thumbnails created by windows
+Thumbs.db
+#Ignore files build by Visual Studio
+*.sdf
+*.opensdf
+*.docstates
+*.obj
+*.exe
+*.pdb
+*.user
+*.aps
+*.pch
+*.vspscc
+*.ncb
+*.suo
+*.tlb
+*.tlh
+*.bak
+*.cache
+*.ilk
+*.a
+*.o
+*.d
+*.so
+*.sbr
+*_ACLiC_dict.def
+[Rr]elease*/
+_ReSharper*/
+[Tt]est[Rr]esult*
+*~
+*#
+.nfs*
+.DS_Store
+nppbackup/
+*.pyc
+.git/
+*.7z
+*.beforeastyle
+.swp
+#Ignore Visual Studio project
+ipch/
+# ignore eclipse and pydev files
+.pydevproject
+.project
+.cproject
+*.pdb
+*.asv
+*.rid
+*.abf
+version.txt
+RigParameters.m
+transformations/*.mex*
+experiments/utility/*.mex*
+sensors/serialCommunications/*.mex*

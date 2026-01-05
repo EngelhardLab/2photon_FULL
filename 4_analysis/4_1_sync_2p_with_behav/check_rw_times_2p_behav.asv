@@ -1,0 +1,65 @@
+function [rw_times,end_trial_times_2p,end_trial_times_rw] = check_rw_times_2p_behav(behav_file,csv_data,frames_behav_time_vec,frames_2p_time_vec,do_weird)
+
+d = load(behav_file);
+
+end_trial_times = zeros(1,length(d.log.block.trial));
+for tctr  = 1:length(d.log.block.trial)
+    end_trial_times(tctr) =  d.log.block.trial(tctr).time(length(d.log.block.trial(tctr).position))+d.log.block.trial(tctr).start;
+end
+
+%if it is a linear track they are all rewards, if not then check when
+%reward was given
+
+if isempty(strfind(d.log.animal.experiment,'linear')) % T-maze
+    end_trial_times_rw = end_trial_times(find([d.log.block.trial.choice]==[d.log.block.trial.trialType]));
+
+else
+    end_trial_times_rw = end_trial_times;
+end
+
+
+if ~isempty(frames_behav_time_vec)
+    end_trial_times_2p = interp1(frames_behav_time_vec,frames_2p_time_vec,end_trial_times_rw,'linear');
+else
+    end_trial_times_2p  = [];
+end
+
+rw_inds = find(csv_data.Input1(1:end-1)<1.5 & csv_data.Input1(2:end)>1.5);
+rw_times = csv_data.Time_ms_(rw_inds)/1e3;
+
+
+weird_idx = find(diff(rw_times) < 9.5);
+
+if ~isempty(weird_idx)
+    disp('FOUND> Sucessive TTLs in less than 10 us');
+    
+       disp('Follow rw_times indexes : ');
+       disp(weird_idx);
+       for i = 1 : length(weird_idx)
+           disp(['diff(rw_times) = ', diff(rw_times(i))]);
+       end
+      
+    disp('SUGG> Run script again with <do_weird> = 1 or debug.');
+
+   if do_weird == 1 
+        if ~isempty(weird_idx)
+            for i = 1 : length(weird_idx)-1
+                next_w = weird_idx(i+1);
+                if next_w - weird_idx(i) == 1 && sum(diff(rw_times(weird_idx(i):next_w+1)))<18
+                    rw_times(next_w) = [];
+                end
+            end
+        end
+   end
+
+end
+% [rw_times'-end_trial_times_2p];
+
+
+
+
+
+
+
+
+

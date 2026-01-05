@@ -1,0 +1,135 @@
+function progressTable = progress_table_function(mouse_folder)
+% progress_table_function
+%   Scans all mouse behavior .mat files and creates a table of:
+%   session date, maze type, and fraction correct (for T6 mazes).
+%
+% INPUT:
+%   mouse_folder - path to the folder containing mouse session .mat files
+%
+% OUTPUT:
+%   progressTable - table with Date, MazeType, and FractionCorrect
+
+% Initialize containers
+Date = datetime.empty;
+mazeTypes = {};
+fractioncorrect = [];
+numtrials_slx_vec = [];
+path_ordered = {};
+
+% Find all .mat files (sessions)
+sessionData = dir(fullfile(mouse_folder, '*.mat'));
+
+% Loop over each session
+for i = 1:length(sessionData)
+    sessionName = sessionData(i).name;
+    sessionPath = fullfile(mouse_folder, sessionName);
+    
+    % Initialize default values for each session
+    sessionDate = NaT;
+    mazeType = 'Unknown';
+    fracCorrect = NaN;
+    
+    % Try loading 'log' struct
+    try
+        s = load(sessionPath, 'log');
+        if ~isfield(s, 'log')
+            warning('No ''log'' field found in file: %s', sessionName);
+            log = [];
+        else
+            log = s.log;
+        end
+    catch
+        warning('Could not load log from file: %s', sessionName);
+        log = [];
+    end
+
+    % If log loaded, extract information
+   if ~isempty(log)
+    % --- Get session date ---
+    if isfield(log.animal, 'importDate') && ~isempty(log.animal.importDate)
+        importDate = log.animal.importDate;
+        if isnumeric(importDate) && length(importDate) == 3
+            sessionDate = datetime(importDate(1), importDate(2), importDate(3));
+        end
+    end
+
+    % --- Get maze type ---
+    if isfield(log.animal, 'virmenSensor')
+        try
+            mazeType = char(string(log.animal.virmenSensor));
+        catch
+            mazeType = 'Unknown';
+        end
+    end
+
+    % --- Find longest session and extract trial data ---
+    if isfield(log, 'block') && isfield(log.block, 'trial')
+        number_of_trials = zeros(1, length(log.block));
+        for e = 1:length(log.block)
+            number_of_trials(e) = length(log.block(e).trial);
+        end
+        select_session = max(number_of_trials);
+        session = find(number_of_trials == select_session, 1, 'first');
+        trialData = log.block(session).trial;
+
+        if isstruct(trialData) && ~isempty(trialData)
+            numtrials = length(trialData);
+
+            % --- Try fancy then simple ---
+           % try
+               % success_vec = [trialData.trialType] == [trialData.choice];
+               % if length(success_vec) > 60
+                %    smoothed_sr = filtfilt(normpdf(-10:10,0,5), 1, double(success_vec));
+%
+                %    first_trial = min([1 find(smoothed_sr(1:50) < 0.6, 1, 'last')]);
+                  %  last_trial = max([100 find(smoothed_sr(50:end) < 0.6, 1, 'first') + 50]);
+                  %  first_trial = max(1, first_trial);
+                   % last_trial = min(length(success_vec), last_trial);
+                   % numtrials_slx = last_trial-first_trial+1; %drn
+
+                   % if last_trial > first_trial
+                    %    fracCorrect = mean(success_vec(first_trial:last_trial));
+                   % else
+                   %     error('First trial after last trial');
+                   % end
+               % else
+                 %   error('Too few trials for filtering');
+              %  end
+          %  catch
+                % If anything goes wrong, use simple middle 60% method
+                try
+                    if numtrials > 5
+                        trials_to_take = round(numtrials/5) : (numtrials - round(numtrials/5));
+                        trialTypes = [trialData(trials_to_take).trialType];
+                        choices = [trialData(trials_to_take).choice];
+                        fracCorrect = mean(trialTypes == choices);
+                        numtrials_slx = numtrials;
+                    else
+                        fracCorrect = NaN;
+                        numtrials_slx = numtrials;
+                    end
+                catch
+                    warning('Could not compute simple fraction correct for file: %s', sessionName);
+                    fracCorrect = NaN;
+                    numtrials_slx = numtrials;
+                end
+            end
+        end
+    end
+
+    % --- Save session info ---
+    Date(end+1,1) = sessionDate;
+    mazeTypes{end+1,1} = mazeType;
+    fractioncorrect(end+1,1) = fracCorrect;
+    numtrials_slx_vec(end+1,1) = numtrials_slx;
+    path_ordered{end+1,1} = sessionPath;
+end
+
+% --- Create final table ---
+progressTable = table(Date, mazeTypes, fractioncorrect,numtrials_slx_vec,path_ordered, ...
+    'VariableNames', {'Date', 'MazeType', 'FractionCorrect','NumTrials', 'Path'}); 
+% Sort table by Date
+progressTable = sortrows(progressTable, 'Date');
+
+
+end

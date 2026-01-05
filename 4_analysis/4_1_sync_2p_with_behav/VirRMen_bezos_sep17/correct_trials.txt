@@ -1,0 +1,6 @@
+ success_vec = [log.block.trial.trialType]==[log.block.trial.choice];
+ smoothed_sr = filtfilt(normpdf(-10:10,0,5),1,double(success_vec));
+ first_trial = min([1 find(smoothed_sr(1:50)<0.6,1,'last')]);
+ last_trial = max([100 find(smoothed_sr(50:end)<0.6,1,'first')+50]);
+ numtrials = last_trial-first_trial+1
+mean_rs = mean(success_vec(first_trial:last_trial))

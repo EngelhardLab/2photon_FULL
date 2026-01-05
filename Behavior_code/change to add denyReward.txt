@@ -1,0 +1,29 @@
+new files
+experiments\classes\PoissonStimulusTrain_discrete2_temptemp.m
+experiments\protocols\PoissonBlocksC4_p.m
+experiments\protocols\stimulus_trains_PoissonBlocksC4_p.mat
+
+replace files
+experiments\common\rewardVRTrial.m
+
+code change
+poisson_patches
+line 49:
+if isfield(vr.mazes(vr.mazeID).variable,'rewardProb')
+    vr.RewardProb = str2double(vr.mazes(vr.mazeID).variable.rewardProb);
+else
+    vr.RewardProb = 1;
+end
+
+line 225 (after "vr.excessTravel = ...")
+     
+
+      if vr.RewardProb < rand
+          vr.denyReward = 1;
+      else
+          vr.denyReward = 0;
+      end
+
+
+line 677 (change to)
+                          , 'iCueEntry', 'iMemEntry', 'iArmEntry', 'denyReward' , 'excessTravel'    ...

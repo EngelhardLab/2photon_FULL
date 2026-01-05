@@ -1,0 +1,108 @@
+%% === Load files ===
+load('C:\Users\EngelhardBlab\Desktop\genmot\9402\output_26022025\behavior sync data\PoissonBlocksShapingC_Cohort5_Engelhard_2p_floor2_m9402_T_20250226.mat');  % log.block.trial
+load('C:\Users\EngelhardBlab\Desktop\genmot\9402\output_26022025\behavior sync data\syncdata\frames_behav_time_vec.mat');  % frames_behav_time_vec
+load('C:\Users\EngelhardBlab\Desktop\genmot\9402\output_26022025\000_all_dffs_session.mat');  % A (1x25 cell array of gpuArrays)
+
+% load("D:\DBMC_bruker\m9399\input9399\07042025\PoissonBlocksShapingC_Cohort5_Engelhard_2p_floor2_m9399_T_20250407.mat");  % log.block.trial
+% load("D:\DBMC_bruker\m9399\input9399\07042025\syncdata\frames_behav_time_vec.mat");  % frames_behav_time_vec
+% load("D:\DBMC_bruker\m9399\07042025\reordered_matrx.mat");  % A (1x25 cell array of gpuArrays)
+% 
+% A = [];
+% 
+% for i = 1: size(all_dffs_pos_0_to_300,1)
+%             A{end+1} = all_dffs_pos_0_to_300(1,:);        
+% end
+
+
+
+%% === Convert A into [frames x neurons] matrix ===
+num_neurons = length(A);
+trace_len = length(A{1});
+dff = zeros(trace_len, num_neurons);  % [frames x neurons]
+
+for i = 1:num_neurons
+    gpu_trace = A{i};             % [1 x N] gpuArray
+    cpu_trace = gather(gpu_trace);  % convert to CPU
+    dff(:,i) = cpu_trace(:);      % ensure column format
+end
+
+%% === Downsample frames_behav_time_vec to match dff ===
+frames_behav_time_vec = frames_behav_time_vec(1:2:end);
+
+% Sanity check
+if length(frames_behav_time_vec) ~= size(dff,1)
+    min_len = min(length(frames_behav_time_vec), size(dff,1));
+    warning('Trimming to minimum shared length');
+    frames_behav_time_vec = frames_behav_time_vec(1:min_len);
+    dff = dff(1:min_len, :);
+end
+
+%% === Set up tuning curve bins ===
+bin_edges = 0:5:300;
+bin_centers = bin_edges(1:end-1) + diff(bin_edges)/2;
+num_bins = length(bin_centers);
+num_trials = length(log.block.trial);
+[num_frames, num_neurons] = size(dff);
+
+trial_tuning = nan(num_trials, num_bins, num_neurons);
+
+%% === Compute trial-by-trial tuning ===
+for i = 1:num_trials
+    trial = log.block.trial(i);
+
+    if isempty(trial.position) || isempty(trial.duration) || isempty(trial.start)
+        continue
+    end
+
+    % Absolute trial timing
+    t_start = trial.start;
+    t_end = t_start + trial.duration;
+
+    % Frame indices within trial
+    frame_idx = find(frames_behav_time_vec >= t_start & ...
+                     frames_behav_time_vec <= t_end);
+    if isempty(frame_idx)
+        continue
+    end
+
+    % Position time series (absolute)
+    pos_y = trial.position(:,2);  % use Y-axis
+    n_pos = length(pos_y);
+    pos_time = linspace(t_start, t_end, n_pos)';
+
+    % Interpolate position at frame times
+    frame_times = frames_behav_time_vec(frame_idx);
+    interp_pos = interp1(pos_time, pos_y, frame_times, 'linear');
+
+    % Trial-specific dFF
+    trial_dff = dff(frame_idx, :);  % [frames x neurons]
+
+    % Bin and compute mean dFF per neuron
+    for b = 1:num_bins
+        in_bin = interp_pos >= bin_edges(b) & interp_pos < bin_edges(b+1);
+        if any(in_bin)
+            trial_tuning(i,b,:) = mean(trial_dff(in_bin,:), 1, 'omitnan');
+        end
+    end
+end
+
+%% === Average over trials ===
+tuning_curve = squeeze(nanmean(trial_tuning, 1));  % [bins x neurons]
+
+%% === Plot: example neuron ===
+n = 1;
+figure;
+plot(bin_centers, tuning_curve(:,n), 'LineWidth', 2);
+xlabel('Position (cm)');
+ylabel('Mean ΔF/F');
+title(['Neuron ', num2str(n), ' — Position Tuning Curve']);
+grid on;
+
+%% === Plot: heatmap of all neurons ===
+figure;
+imagesc(bin_centers, 1:num_neurons, tuning_curve');
+xlabel('Position (cm)');
+ylabel('Neuron #');
+title('All Neurons — Position Tuning Map');
+colormap hot;
+colorbar;

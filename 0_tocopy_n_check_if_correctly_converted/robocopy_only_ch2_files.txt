@@ -1,0 +1,6 @@
+example command to copy files that only contain *_Ch2_*.ome.tif in its name :
+
+
+robocopy Z:\27092024 E:\27092024 *_Ch2_*.ome.tif *.env *.xml *.csv /njh /njs /ndl /nc /ns /np /nfl /E /MT:64
+
+
