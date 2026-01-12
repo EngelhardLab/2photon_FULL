@@ -75,7 +75,7 @@ def main():
 
     active_processes = []
     do_check_min = 2    # Check frequency in minutes
-    num_mats = 3        # Number of parallel instances
+    num_mats = 1        # Number of parallel instances
 
     # Run initial correction
     correct_chunks(input_folder, output_folder)
