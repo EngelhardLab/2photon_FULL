@@ -10,6 +10,12 @@
 *.h5
 *.mat
 
+# Ignore video files
+*.mov
+*.avi
+*.mp4
+*.mkv
+
 # Keep your code! 
 # (By default, anything ending in .m will be saved)
 >>>>>>> 984f422 (Update processing scripts and add .gitignore)
