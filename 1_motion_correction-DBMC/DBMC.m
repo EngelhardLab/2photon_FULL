@@ -67,7 +67,6 @@ else
     disp('translation-only correction already performed , skipping...')
 end
 
-try
 %get sharper movie templates for subsequent demons registration
 if ~exist([output_folder,'templates_mov_sharp.tif'],'file')
     disp('Motion correcting sharper templates.....')
@@ -94,10 +93,6 @@ if ~exist([output_folder,'templates_mov_sharp.tif'],'file')
     
 else
     disp('Sharp template movie exists, skipping pre-processing.....')
-end
-
-catch
-    disp('')
 end
 
 % non-rigid registration of the template with demons
@@ -134,44 +129,30 @@ disp('Now starting work on individual Patches.....')
 patcheslist = dir([patches_folder,'*.roi']);
 num_patches = length(patcheslist);
 
-%check if we should downsample or not
-subf_name = input_folder(slashfind(end-1)+1:slashfind(end)-1);
-xml_file = fileread([input_folder,subf_name,'.xml']);
-reltimesinds = strfind(xml_file,'relativeTime');
-clear reltimesvec;
-for relctr = 1:10
-    tempstr=xml_file(reltimesinds(relctr+1):reltimesinds(relctr+1)+100);
-    dqinds = find(tempstr=='"');
-    reltimesvec(relctr)=str2double(tempstr(dqinds(1)+1:dqinds(2)-1));
-end
-if median(diff(reltimesvec))<0.04
-    flag_downsample=1;
-else
-    flag_downsample=0;
-end
-%
-
 patches_processed_vec = [];
 patches_processed_start_times = {};
 patches_processed_end_times = {};
 k = 0 ;
 for i=1:num_patches
-    patch_file = [patches_folder,patcheslist(i).name];
-    patch_taken_file  = [output_folder,'Patch ',num2str(i),' taken.txt'];
-    if ~exist(patch_taken_file,'file') && k == 0 
-        f = fopen( patch_taken_file, 'w' );
-        fclose(f);
-        patches_processed_vec(end+1) = i;
-        patches_processed_start_times{end+1} = datetime;
-        process_patch(output_folder,patch_file,i,want_red_channel,use_red_channel,flag_downsample);
-        patches_processed_end_times{end+1} = datetime;
-        k = 1 ;
-    end
+        patch_file = [patches_folder,patcheslist(i).name];
+        patch_taken_file  = [output_folder,'Patch ',num2str(i),' taken.txt'];
+        if ~exist(patch_taken_file,'file') && k == 0 
+            f = fopen( patch_taken_file, 'w' );
+            fclose(f);
+            patches_processed_vec(end+1) = i;
+            patches_processed_start_times{end+1} = datetime;
+            process_patch(output_folder,patch_file,i,want_red_channel,use_red_channel);
+            patches_processed_end_times{end+1} = datetime;
+            %k = 1 ;
+        end
 end
 disp('Finished all patches')
 
-for l=1:length(patches_processed_vec)
-    disp(['Patch ',num2str(patches_processed_vec(l)), ' Start: ',char(patches_processed_start_times{l}),' end: ',char(patches_processed_end_times{l})])
+    for l=1:length(patches_processed_vec)
+        disp(['Patch ',num2str(patches_processed_vec(l)), ' Start: ',char(patches_processed_start_times{l}),' end: ',char(patches_processed_end_times{l})])
+    end
+
+%exit(1);
 end
 
 

@@ -27,7 +27,7 @@ if nargin<13
     pre_proc_flag=1;
 end
 
-
+try
 orig_big_stack = big_stack;
 big_stack = single(big_stack);
 
@@ -69,8 +69,12 @@ for iter_ctr = 1:maxiters
     tic;
     template=get_med_of_avg_template(stack(:,:,1:max_files_for_mc_template),avg_win);
 
-    for i=1:mov_length  
+    for i=1:mov_length
+        try
         curcormat = normxcorr222(template(max_shift+1:end-max_shift,max_shift+1:end-max_shift), stack(:,:,i));     
+        catch ME
+            disp('')
+        end
         [szh,szw] = size(template(max_shift+1:end-max_shift,max_shift+1:end-max_shift));
         curcormat=curcormat(szh:end-szh+1,szw:end-szw+1);
         curcormat=rot90(curcormat,2);
@@ -137,7 +141,9 @@ else
     mc_stack=stack;
 end
 
-
+catch ME 
+    dis('')
+end
 
 
 

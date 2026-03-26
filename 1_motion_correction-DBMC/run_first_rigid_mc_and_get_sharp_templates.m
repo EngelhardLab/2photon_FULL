@@ -1,22 +1,11 @@
 function run_first_rigid_mc_and_get_sharp_templates(input_folder,output_folder,have_red_channel,use_red_channel,slashind)
 
 
-%if have_red_channel
-%    tiflist_green = dirsort([input_folder,'*Ch2*.tif']);
-%    tiflist_red   = dirsort([input_folder,'*Ch1*.tif']);
-%else
-%    tiflist_green = dirsort([input_folder,'*Ch1*.tif']);
-%end
-
-archivos = dirsort([input_folder,'*Ch*.tif']);
-
 if have_red_channel
-   tiflist_green = archivos(contains({archivos.name}, 'Ch2') & ~contains({archivos.name}, 'Ch1'));
-   tiflist_red   = archivos(contains({archivos.name}, 'Ch1') & ~contains({archivos.name}, 'Ch2'));
-   disp('Ch1 & Ch2 correctly filtered');
+    tiflist_green = dirsort([input_folder,'*Ch2*.tif']);
+    tiflist_red   = dirsort([input_folder,'*Ch1*.tif']);
 else
-   tiflist_green = archivos(contains({archivos.name}, 'Ch2') & ~contains({archivos.name}, 'Ch1'));
-   disp('Ch2 correctly filtered');
+    tiflist_green = dirsort([input_folder,'*Ch1*.tif']);
 end
 
 %artifically divide in chunks of 1500 for drift analysis
@@ -41,7 +30,6 @@ for i=1:num_chunks
 end
 
 save([output_folder,'chunks_info'],'*chunk*')
-
 
 
 sharptemplate_folder = [output_folder,'sharptemplates',slashind];
@@ -122,6 +110,6 @@ if have_red_channel && use_red_channel
         templates_green(:,:,i)=get_med_of_avg_template(mc_stack,50);
         
     end
-    saveastiff(single(templates_green),[output_folder,'template_mov_green.tif']);
+    saveastiff(templates_green,[output_folder,'template_mov_green.tif']);
 end
 
