@@ -1,12 +1,17 @@
-function mask=make_mask_from_roi(roi_struct,orig_image_size)
+function mask=make_mask_from_roi(roi_struct,orig_image_size,interp_flag)
 
-mask = zeros(orig_image_size);
+if nargin<3
+    interp_flag=0;
+end
+
+mask = gpuArray.zeros(orig_image_size);
 
 if isfield(roi_struct,'mnCoordinates')
     num_selections = 1;
     sels(1).rows_vector = roi_struct.mnCoordinates(:,2);
     sels(1).cols_vector = roi_struct.mnCoordinates(:,1);
 else
+%     selections_start_inds = find(roi_struct.vfShapes==0);
     selections_start_inds  = [1; find(roi_struct.vfShapes(1:end-4)==1 & roi_struct.vfShapes(4:end-1)==4 & roi_struct.vfShapes(5:end)==0)+4];
     num_selections = length(selections_start_inds);
     
@@ -16,6 +21,10 @@ else
         else
             curcoords = roi_struct.vfShapes(selections_start_inds(selctr):end);
         end
+        %         curcoords(1) = 1;
+        %         startsinds = find(curcoords==1);
+        %         sels(selctr).cols_vector = curcoords(startsinds+1);
+        %         sels(selctr).rows_vector = curcoords(startsinds+2);
         sels(selctr).cols_vector = curcoords(2:3:end);
         sels(selctr).rows_vector = curcoords(3:3:end);
     end
@@ -24,7 +33,39 @@ end
 for selctr = 1:num_selections
     
      BW = poly2mask( sels(selctr).cols_vector,sels(selctr).rows_vector, orig_image_size(1), orig_image_size(2));
-     mask(BW==1)=1;   
+     mask(BW==1)=1;
+%     
+%     rows_in_roi = unique(sels(selctr).rows_vector);
+%     clear cur_left cur_right
+%     for i=1:length(rows_in_roi)
+%         cur_left(i)  = min(sels(selctr).cols_vector(sels(selctr).rows_vector==rows_in_roi(i)));
+%         cur_right(i) = max(sels(selctr).cols_vector(sels(selctr).rows_vector==rows_in_roi(i)));
+%     end
+%     badind = find(abs(cur_left-cur_right)<5);
+%     
+%     goodind = setdiff(1:length(cur_left),badind);
+%     rows_in_roi = rows_in_roi(goodind);
+%     cur_left    = cur_left(goodind);
+%     cur_right   = cur_right(goodind);
+%     
+%     cur_left(cur_left<1)=1;
+%     cur_right(cur_right>orig_image_size(2))=orig_image_size(2);
+%     
+%     if interp_flag
+%         [rows_in_roi,cur_left,cur_right] = interp_missing(rows_in_roi,cur_left,cur_right);
+%         cur_left =interp_outliers(cur_left);
+%         cur_right=interp_outliers(cur_right);
+%         cur_left=round(cur_left);
+%         cur_right=round(cur_right);
+%         
+%     end
+%     
+%     for i=1:length(rows_in_roi)
+%         if rows_in_roi(i)>0
+%             mask(rows_in_roi(i),cur_left(i):cur_right(i))=1;
+%         end
+%     end
+%     
 end
 
 
