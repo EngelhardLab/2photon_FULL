@@ -93,7 +93,7 @@ disp('')
     
     total_i_vec=total_i_vec+cur_i_vec;
     total_j_vec=total_j_vec+cur_j_vec;
-    % disp('flag end of normx')
+    disp('flag end of normx')
     cur_error = [mean(abs(cur_i_vec-mean(cur_i_vec))) mean(abs(cur_j_vec-mean(cur_j_vec)))];
     
     curtimesec=toc;

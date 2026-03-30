@@ -4,6 +4,10 @@ if nargin<2
     avg_win=50;
 end
 
+if size(stack,3 ) < avg_win
+    avg_win=round(size(stack,3)/2) ;
+end
+
 %avgs_stack = zeros(size(stack,1),size(stack,2),floor(size(stack,3)/avg_win));
 avgs_stack = zeros(size(stack,1),size(stack,2),floor(size(stack,3)/avg_win),"gpuArray");
 
