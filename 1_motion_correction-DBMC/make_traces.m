@@ -76,13 +76,11 @@ end
 
 %replacing fluorescense value with NaNs where cell stops being visible
 
-    txt_isvisible = [savefolder,'Patch_',tif_files_prefix(27:end),'_visible.txt'];
-    
+    txt_isvisible = [savefolder,'Patch_',tif_files_prefix(27:end),'_visible'];
+    cell_visible_lines = readlines(txt_isvisible,"EmptyLineRule","skip")
+    total_frames = 0;
 
 if exist(txt_isvisible,'file')
-    cell_visible_lines = readlines(txt_isvisible,"EmptyLineRule","skip");
-    total_frames = 0;
-    
     for k=1:length(roi_files_cell)
         trace = traces_cell{k};
 
@@ -124,7 +122,7 @@ if exist(txt_isvisible,'file')
     end
 
 else 
-    disp(['[Patch #',tif_files_prefix(27:end),'] >> visible.txt was not found, skipping...'])
+    disp([txt_isvisible,' was not found, skipping...'])
     if ~isempty(savesubfolder)
 
         for k=1:length(roi_files_cell)
@@ -142,4 +140,4 @@ else
     end
 end
 a2 = datetime;
-disp(['[Patch #',tif_files_prefix(27:end),'] >>Elapsed time : ',char(a2-a1)]);
+disp(['Elapsed time : ',char(a2-a1)]);

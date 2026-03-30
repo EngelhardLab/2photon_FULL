@@ -1,5 +1,5 @@
 
-function res=process_patch(output_folder,patch_file,patch_ctr,want_red_channel,use_red_channel,flag_downsample)
+function res=process_patch(output_folder,patch_file,patch_ctr,want_red_channel,use_red_channel)
 
 disp(['Now working on patch ',num2str(patch_ctr)])
 
@@ -86,12 +86,7 @@ if length(files_saved)>0
 end
 
 threshold_before_ds = 140;
-if flag_downsample
-    ds_win = 2;
-else
-    ds_win = 1;
-end
-    
+ds_win = 2;
 for chunk_ctr = start_chunk_ctr:num_chunks
     
     %% load file
@@ -125,9 +120,14 @@ for chunk_ctr = start_chunk_ctr:num_chunks
     
     %% now motion correct this movie patch
     mc_time=tic;
+    try
     [res_str,mc_stack_ds,dsind_cell] = motion_correct_ds_submovie(ImageStack_mc,50,3,max_shift,0.2,1,1,...
         ds_win,-1,[patch_h patch_w],row_patch_start*ones(1,size(ImageStack_mc,3)),col_patch_start*ones(1,size(ImageStack_mc,3)),imsize_extract,threshold_before_ds);
+    catch ME
+        disp('')
+    end
     
+
     disp(['Calculating and applying motion correction took ',num2str(toc(mc_time)),' seconds']);
     %%
     
