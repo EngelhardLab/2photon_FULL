@@ -4,7 +4,11 @@ if nargin<3
     interp_flag=0;
 end
 
-mask = gpuArray.zeros(orig_image_size);
+if canUseGPU
+    mask = gpuArray.zeros(orig_image_size);
+else
+    mask = zeros(orig_image_size);
+end
 
 if isfield(roi_struct,'mnCoordinates')
     num_selections = 1;

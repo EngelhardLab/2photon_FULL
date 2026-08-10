@@ -71,7 +71,7 @@ def main():
 
     #first run
     for _ in range(num_mats):
-        active_processes.append(run_matlab_instance(input_folder, output_folder, param1, param2))
+        active_processes.append(run_matlab_instance(input_folder, output_folder, param1, param2, param3))
 
         time.sleep(10)
 

@@ -1,6 +1,9 @@
-function make_ds5_movie(output_folder,patch_ctr)
+function make_ds5_movie(output_folder,patch_ctr,newprefix)
 if nargin<2
     patchnums=[];
+end
+if nargin<3
+    newprefix=[];
 end
 
 
@@ -16,9 +19,18 @@ if ~exist(ds5_foldername )
     mkdir(ds5_foldername )
 end
 
-tiffilename  = ['mc_image_stack_full_patch_',num2str(patch_ctr),'.tif']; % if movie is not divided into parts
+if isempty(newprefix)
+    tiffilename  = ['mc_image_stack_full_patch_',num2str(patch_ctr),'.tif']; % if movie is not divided into parts
+else
+    tiffilename  = [newprefix,num2str(patch_ctr),'.tif']; % if movie is not divided into parts
+end
+
 if ~exist([output_folder,tiffilename],'file')
-    tiffilename  = ['mc_image_stack_full_patch_',num2str(patch_ctr),'_part1.tif']; % if movie is divided into parts, do only first part
+    if isempty(newprefix)
+        tiffilename  = ['mc_image_stack_full_patch_',num2str(patch_ctr),'_part1.tif']; % if movie is divided into parts, do only first part
+    else
+        tiffilename  = [newprefix,num2str(patch_ctr),'_part1.tif']; % if movie is divided into parts, do only first part
+    end
 end
 
 new_tiffilename = [tiffilename(1:end-4),'_ds5.tif'];

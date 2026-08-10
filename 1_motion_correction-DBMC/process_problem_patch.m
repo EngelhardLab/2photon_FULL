@@ -1,67 +1,110 @@
+
 function res=process_problem_patch(output_folder,patch_file,patch_ctr,want_red_channel,use_red_channel,flag_downsample,good_chunks)
 
 disp(['Now working on patch ',num2str(patch_ctr)])
 
 max_shift = 30;
 
-slashind = filesep; % Automatically handles / or \
+slashind = '\';
+if isunix
+    slashind ='/';
+end
 
 tempfolder = [output_folder,'tempsaves',slashind];
 if ~exist(tempfolder,'dir')
-    mkdir(tempfolder);
+    mkdir( tempfolder);
 end
 
-%% Helper for Path Fixes
-% Defining path correction as a nested function to avoid repetition
-    function fixed_path = fix_path(p)
-        fixed_path = p;
-        if contains(p, 'N:\2Photon_Data')
-            fixed_path = strrep(p, 'N:\2Photon_Data', '/mnt/nas/2Photon_Data/2P_Imaging_Converted_Data');
-            fixed_path = strrep(fixed_path, '\', '/');
-        end
-        if strcmp(getenv('COMPUTERNAME'),'BEN-OFFICE')
-           fixed_path =  ['Z:\2Photon_Data\2P_Imaging_Converted_Data\m1993\05122024\',p(end-80:end)];
+
+%% get raw tif files
+load([output_folder,'chunks_info'],'num_chunks','chunks_lengths_vec','chunks_green_filenames','chunks_red_filenames')
+if strcmp(getenv('COMPUTERNAME'),'BEN-OFFICE')
+    for jj=1:length(chunks_green_filenames)
+        for kk=1:length(chunks_green_filenames{jj})
+            chunks_green_filenames{jj}{kk} =  ['Z:\2Photon_Data\2P_Imaging_Converted_Data\m1993\05122024\',chunks_green_filenames{jj}{kk}(end-80:end)];
         end
     end
+    if exist('chunks_red_filenames','var')
+        for jj=1:length(chunks_red_filenames)
+            for kk=1:length(chunks_red_filenames{jj})
+                chunks_red_filenames{jj}{kk} =  ['Z:\2Photon_Data\2P_Imaging_Converted_Data\m1993\05122024\',chunks_red_filenames{jj}{kk}(end-80:end)];
+            end
+        end
+    end
+end
 
-%% Load raw tif filenames and metadata
-load([output_folder,'chunks_info'],'num_chunks','chunks_lengths_vec','chunks_green_filenames','chunks_red_filenames')
+%%
 
-%% Check if already processed
-if ~isempty(dir([output_folder,'mc_image_stack_full_patch_problem_',num2str(patch_ctr),'*tif'])) 
+
+%% check if run is relevant. if not, quit
+if ~isempty(dir([output_folder,'mc_image_stack_full_problem_patch_',num2str(patch_ctr),'*tif'])) 
     disp(['patch number (',num2str(patch_ctr),') seems to have already been processed. Quitting. '])
     res =[];
     return
 end
+%%
 
-%% Load displacement field and dimensions
+%% get displacement field for each file
 load([output_folder,'demons_disp_cell.mat'],'disp_cell_summed')
+%%
+
+%% get the height and width of movie
 mov_h=size(disp_cell_summed{1},1);
 mov_w=size(disp_cell_summed{1},2);
+%%
+
 
 all_patch_time=tic;
 patch_struct = ReadImageJROI(patch_file);
 cur_mask=make_mask_from_roi(patch_struct,[mov_h mov_w]);
 
-cur_selection_binary = double(cur_mask>0); 
+cur_selection_binary = double(cur_mask>0); % masked selection of the patch (full 512 by 512 image, 0 if not in patch, 1 if in patch)
 [~,cur_patch_coordinates,patch_h,patch_w] = boundingRec(cur_selection_binary);
 
-%% Patch extraction parameters
-imsize_extract = round(1.1*max([patch_h patch_w])); 
+
+%% loop over all tiff files and extract a square patch of size imsize_extract around the patch that is shifted by the mean displacement of
+%% the patch in the file according to demons and the standrad motion correction of each frame
+imsize_extract = round(1.1*max([patch_h patch_w])); % size of submovie to be extracted, for now make it square
 imsize_extract2=round(imsize_extract*1.2);
+mov_size_lr = ceil(([imsize_extract imsize_extract]-[patch_h patch_w])/2); % size of extracted submovie beyond the patch
+
+row_centering_vec_files = zeros(1,num_chunks); %top  indexes of centered patch
+col_centering_vec_files = zeros(1,num_chunks); %left indexes of centered patch
 
 load([output_folder,'final_xy_shifts.mat'],'XX_cell','YY_cell')
 
 disp(['Now working on patch ',num2str(patch_ctr),' (',patch_struct.strName,')']);
-
-
+disp('')
+%extract a patch 1.5 the size of what we need, motion correct it and then extract
+%the midddle part. 
+disp('Loading templates file...')
+mc_tmu = loadTiffStack_single([output_folder,'template_mov.tif']);
+clear centpatchd_mat cur_centered_patch row_patch_start col_patch_start
+% disp('Extracting movie patch from mean demons displacement field...')
 for chunk_ctr = 1:num_chunks
     centpatchd_mat(chunk_ctr,:) = find_center_of_displaced_patch(cur_patch_coordinates,patch_h,patch_w,zeros(512,512,2));
-    row_patch_start_vec(chunk_ctr) = round(centpatchd_mat(chunk_ctr,2)-patch_h/2);
-    col_patch_start_vec(chunk_ctr) = round(centpatchd_mat(chunk_ctr,1)-patch_w/2);
+    row_patch_start = round(centpatchd_mat(chunk_ctr,2)-patch_h/2);
+    col_patch_start = round(centpatchd_mat(chunk_ctr,1)-patch_w/2);
+    row_patch_start_vec(chunk_ctr) = row_patch_start;
+    col_patch_start_vec(chunk_ctr) = col_patch_start;
 end
-
+disp('Motion correcting templates patch and updating patch extraction coordinates...')
+% [rtv_patch,ctv_patch]  =    mc_rigid_submovie_from_movie(mc_tmu,1,3,max_shift,0.2,1,1,-1,[patch_h patch_w],row_patch_start_vec,col_patch_start_vec,imsize_extract);
+% centpatchd_mat2=centpatchd_mat-[rtv_patch' ctv_patch'];
 centpatchd_mat2=centpatchd_mat;
+disp('')
+disp('Start of main loop...')
+start_chunk_ctr=1;
+files_saved = dir([tempfolder,'mc_stack_temp_problem_patch_',num2str(patch_ctr),'_file_*']);
+if length(files_saved)>0
+%     start_chunk_ctr=length(files_saved)+1;
+    load([tempfolder,'curres_problem_',num2str(patch_ctr)],'res');
+end
+start_chunk_ctr=1;
+done_chunks_vec = [];
+for tempctr = 1:length(files_saved)
+    done_chunks_vec (end+1) = str2double(files_saved(tempctr).name(find(files_saved(tempctr).name=='_',1,'last')+1:end-4));
+end
 
 
 threshold_before_ds = 140;
@@ -69,48 +112,58 @@ ds_win = 1; if flag_downsample; ds_win = 2; end
 
 num_frames_per_chunk = [];
 
-%% MAIN ALIGNMENT LOOP
-for chunk_ctr = 1:num_chunks
-    tic
-
+for chunk_ctr = start_chunk_ctr:num_chunks
+    
     if ~ismember(chunk_ctr,good_chunks)
         temp_vec = 1:length(chunks_green_filenames{chunk_ctr});
         num_frames_per_chunk(chunk_ctr) = length(temp_vec(1:ds_win:end));
         continue
     end
+    if ismember(chunk_ctr,done_chunks_vec)
+        continue
+    end
 
+
+    %% load file
+    tic
+%     clear ImageStack
+%    ImageStack = loadTiffStack_single(tiflist_full{chunk_ctr},frames_to_take);  
     ImageStack=zeros(mov_h,mov_w,chunks_lengths_vec(chunk_ctr),'single');
-    
-    % Decide which channel to use for calculating shifts
     if use_red_channel
         for j=1:chunks_lengths_vec(chunk_ctr)
-            ImageStack(:,:,j)=imread(fix_path(chunks_red_filenames{chunk_ctr}{j}));
+            ImageStack(:,:,j)=imread(chunks_red_filenames{chunk_ctr}{j});
         end
     else
         for j=1:chunks_lengths_vec(chunk_ctr)
-            ImageStack(:,:,j)=imread(fix_path(chunks_green_filenames{chunk_ctr}{j}));
+            ImageStack(:,:,j)=imread(chunks_green_filenames{chunk_ctr}{j});
         end
     end
 
+
     disp(['Loading Chunk ',num2str(chunk_ctr),' took ',num2str(toc),' seconds']);
+    %%
     
-    %% Apply pre-calculated Rigid shifts
+    %% motion correct current movie
+%     ImageStack_mc=apply_mc(ImageStack,YY_cell{chunk_ctr},XX_cell{chunk_ctr}); % make sure x and y are not inverted here % it was inverted! now fixed
     ImageStack_mc=ImageStack;
-    
+    %%
+   
+    %% extract movie patch
     row_patch_start = round(centpatchd_mat2(chunk_ctr,2)-patch_h/2);
     col_patch_start = round(centpatchd_mat2(chunk_ctr,1)-patch_w/2);
+    %%
     
-    %% Calculate and apply Non-Rigid (Demons) alignment
+    %% now motion correct this movie patch
     mc_time=tic;
     [res_str,mc_stack_ds,dsind_cell] = motion_correct_ds_submovie(ImageStack_mc,50,3,max_shift,0.2,1,1,...
         ds_win,-1,[patch_h patch_w],row_patch_start*ones(1,size(ImageStack_mc,3)),col_patch_start*ones(1,size(ImageStack_mc,3)),imsize_extract,threshold_before_ds);
     
     disp(['Calculating and applying motion correction took ',num2str(toc(mc_time)),' seconds']);
+    %%
     
-    % Temporary save
     save([tempfolder,'mc_stack_temp_problem_patch_',num2str(patch_ctr),'_file_',num2str(chunk_ctr)],'mc_stack_ds')
     
-    % Store metadata
+    %save translation and centering coordinates for this file
     res.first_row_translation_vec_cell{chunk_ctr}   = res_str.first_i_vec;
     res.first_col_translation_vec_cell{chunk_ctr}   = res_str.first_j_vec;
     res.first_translation_xcorr_vec_cell{chunk_ctr} = res_str.first_xcorr_vec;
@@ -118,41 +171,65 @@ for chunk_ctr = 1:num_chunks
     res.ds_col_translation_vec_cell{chunk_ctr}      = res_str.ds_j_vec;
     res.ds_translation_xcorr_vec_cell{chunk_ctr}    = res_str.ds_xcorr_vec;
     res.dsind_cell_cell{chunk_ctr}                  = dsind_cell;
+    
     res.row_patch_start_vec(chunk_ctr) = row_patch_start;
     res.col_patch_start_vec(chunk_ctr) = col_patch_start;
     res.all_templates(:,:,chunk_ctr) = res_str.ds_template;
     res.num_frames_file(chunk_ctr)   = size(mc_stack_ds,3);
+    %%
+    save([tempfolder,'curres_problem_',num2str(patch_ctr)],'res')
     
-%     save([tempfolder,'curres_',num2str(patch_ctr)],'res')
 end
+load([tempfolder,'curres_problem_',num2str(patch_ctr)],'res');
 
-% load([tempfolder,'curres_',num2str(patch_ctr)],'res');
 res.patch_size = [patch_h patch_w];
 res.name     = patch_struct.strName;
 res.centpatchd_mat2 = centpatchd_mat2;
 res.threshold_before_ds = threshold_before_ds;
 res.ds_win=ds_win;
 
+%%now motion correct the templates and shifts movie accordingly
+num_templates = size(res.all_templates,3);
+pixelsum_templates = zeros(1,num_templates);
+for tempctr = 1:num_templates 
+    pixelsum_templates(tempctr) = sum(sum(res.all_templates(:,:,tempctr)));
+end
+row_translation_templates = zeros(1,num_templates);
+col_translation_templates = zeros(1,num_templates);
+[row_translation_templates_goodtemplates,col_translation_templates_goodtemplates] = mc_rigid(res.all_templates(:,:,find(pixelsum_templates>0)),1,10,20,0.2,1,1);
+row_translation_templates(find(pixelsum_templates>0)) = row_translation_templates_goodtemplates;
+col_translation_templates(find(pixelsum_templates>0)) = col_translation_templates_goodtemplates;
+%%
+
+
 save([output_folder,'res_mc_data_problem_',num2str(patch_ctr),'.mat'],'res');
 
-%% SAVING LOOP (RELOADS AND SAVES BOTH CHANNELS)
-max_size_file=2.7e9; 
+%save entire session
+tic
+max_size_file=2.7e9; %was 3.8 before
 bytes_per_frame = (imsize_extract^2)*4;
 bytes_per_file=bytes_per_frame*750;
-num_files_per_movie=min(floor(max_size_file/bytes_per_file), floor((2^16-1)/750));
+max_files_frame_limit = floor((2^16-1)/750);
+num_files_per_movie=min(floor(max_size_file/bytes_per_file),max_files_frame_limit);
+est_num_movies = ceil(length(res.num_frames_file)/num_files_per_movie);
 
 mc_time_template=tic;
-[row_translation_templates,col_translation_templates] = mc_rigid(res.all_templates,1,10,20,0.2,1,1);
+
+
+
+disp(['Calculating motion correction to templates took ',num2str(toc(mc_time_template)),' seconds']);
 
 avg_frame_lim = 500;
-avg_movie = []; prev_for_avgs = [];
+avg_movie     = [];
+prev_for_avgs = [];
 total_avg_frame_ctr=1;
-movie_ctr = 1; savechunk_ctr=1;
 
+movie_ctr = 1;
+savechunk_ctr=1;
+mc_save_time_template=tic;
 disp(' Reloading files, applying global motion correction and saving...')
 mc_image_stack_full = [];      
 mc_image_stack_full_red = [];      
-
 for chunk_ctr = 1:num_chunks
 
     if ~ismember(chunk_ctr,good_chunks)
@@ -164,77 +241,117 @@ for chunk_ctr = 1:num_chunks
         end
     else
 
-        disp(['Processing file ',num2str(chunk_ctr),' of ',num2str(num_chunks)])
 
-    if ~use_red_channel
+    disp(['Processing file ',num2str(chunk_ctr),' of ',num2str(num_chunks)])
+    if ~use_red_channel %load the file (it is already corrected green channel file
         load([tempfolder,'mc_stack_temp_problem_patch_',num2str(patch_ctr),'_file_',num2str(chunk_ctr)],'mc_stack_ds')
-        if want_red_channel
-            ImageStack=zeros(mov_h,mov_w,chunks_lengths_vec(chunk_ctr),'single');
-            for j=1:chunks_lengths_vec(chunk_ctr)
-                ImageStack(:,:,j)=imread(fix_path(chunks_red_filenames{chunk_ctr}{j}));
-            end
-            ImageStack_mc=apply_mc(ImageStack,YY_cell{chunk_ctr},XX_cell{chunk_ctr});
-            row_patch_start = round(res.centpatchd_mat2(chunk_ctr,2)-patch_h/2);
-            col_patch_start = round(res.centpatchd_mat2(chunk_ctr,1)-patch_w/2);
-            mc_stack_ds_red=apply_mc_ds_submovie(ImageStack_mc,res.first_row_translation_vec_cell{chunk_ctr},res.first_col_translation_vec_cell{chunk_ctr},res.threshold_before_ds,res.ds_win,res.patch_size,...
-                res.ds_row_translation_vec_cell{chunk_ctr},res.ds_col_translation_vec_cell{chunk_ctr},row_patch_start*ones(1,size(ImageStack_mc,3)),col_patch_start*ones(1,size(ImageStack_mc,3)),imsize_extract2,max_shift);
-        end
-    else
-        if want_red_channel
-            load([tempfolder,'mc_stack_temp_patch_',num2str(patch_ctr),'_file_',num2str(chunk_ctr)],'mc_stack_ds')
-            mc_stack_ds_red = mc_stack_ds;
-        end
+
+        if want_red_channel % the saved file is the corrected green channel file, so now we use the calculated shifts to get the corrected red channel file
+
+   %         ImageStack = loadTiffStack_single(tiflist_full{chunk_ctr},min(frames_to_take,1));
         ImageStack=zeros(mov_h,mov_w,chunks_lengths_vec(chunk_ctr),'single');
         for j=1:chunks_lengths_vec(chunk_ctr)
-            ImageStack(:,:,j)=imread(fix_path(chunks_green_filenames{chunk_ctr}{j}));
+            ImageStack(:,:,j)=imread(chunks_red_filenames{chunk_ctr}{j});
         end
+
         ImageStack_mc=apply_mc(ImageStack,YY_cell{chunk_ctr},XX_cell{chunk_ctr});
         row_patch_start = round(res.centpatchd_mat2(chunk_ctr,2)-patch_h/2);
         col_patch_start = round(res.centpatchd_mat2(chunk_ctr,1)-patch_w/2);
-        mc_stack_ds=apply_mc_ds_submovie(ImageStack_mc,res.first_row_translation_vec_cell{chunk_ctr},res.first_col_translation_vec_cell{chunk_ctr},res.threshold_before_ds,res.ds_win,res.patch_size,...
+    
+        mc_stack_ds_red=apply_mc_ds_submovie(ImageStack_mc,res.first_row_translation_vec_cell{chunk_ctr} ,res.first_col_translation_vec_cell{chunk_ctr},res.threshold_before_ds,res.ds_win,res.patch_size,...
             res.ds_row_translation_vec_cell{chunk_ctr},res.ds_col_translation_vec_cell{chunk_ctr},row_patch_start*ones(1,size(ImageStack_mc,3)),col_patch_start*ones(1,size(ImageStack_mc,3)),imsize_extract2,max_shift);
-    end
 
+
+        end
+
+    else % the saved file is the corrected red channel file, so now we use the calculated shifts to get the corrected green channel file
+
+        if want_red_channel
+            load([tempfolder,'mc_stack_temp_problem_patch_',num2str(patch_ctr),'_file_',num2str(chunk_ctr)],'mc_stack_ds')
+            mc_stack_ds_red = mc_stack_ds;
+        end
+        %         ImageStack = loadTiffStack_single(tiflist_full{chunk_ctr},min(frames_to_take,1));
+        ImageStack=zeros(mov_h,mov_w,chunks_lengths_vec(chunk_ctr),'single');
+        for j=1:chunks_lengths_vec(chunk_ctr)
+            ImageStack(:,:,j)=imread(chunks_green_filenames{chunk_ctr}{j});
+        end
+
+        ImageStack_mc=apply_mc(ImageStack,YY_cell{chunk_ctr},XX_cell{chunk_ctr});
+        row_patch_start = round(res.centpatchd_mat2(chunk_ctr,2)-patch_h/2);
+        col_patch_start = round(res.centpatchd_mat2(chunk_ctr,1)-patch_w/2);
+    
+        mc_stack_ds=apply_mc_ds_submovie(ImageStack_mc,res.first_row_translation_vec_cell{chunk_ctr} ,res.first_col_translation_vec_cell{chunk_ctr},res.threshold_before_ds,res.ds_win,res.patch_size,...
+            res.ds_row_translation_vec_cell{chunk_ctr},res.ds_col_translation_vec_cell{chunk_ctr},row_patch_start*ones(1,size(ImageStack_mc,3)),col_patch_start*ones(1,size(ImageStack_mc,3)),imsize_extract2,max_shift);
+        
+    end
     cur_ones_vec = ones(1,res.num_frames_file(chunk_ctr));
-    temp_movie = apply_mc(single(mc_stack_ds),row_translation_templates(chunk_ctr)*cur_ones_vec,col_translation_templates(chunk_ctr)*cur_ones_vec);
-    mc_image_stack_full = cat(3,mc_image_stack_full,temp_movie);
+    temp_movie =  apply_mc(single(mc_stack_ds),row_translation_templates(chunk_ctr)*cur_ones_vec,col_translation_templates(chunk_ctr)*cur_ones_vec); 
+    mc_image_stack_full =cat(3,mc_image_stack_full,temp_movie);
 
     if want_red_channel
-        temp_movie = apply_mc(single(mc_stack_ds_red),row_translation_templates(chunk_ctr)*cur_ones_vec,col_translation_templates(chunk_ctr)*cur_ones_vec);
-        mc_image_stack_full_red = cat(3,mc_image_stack_full_red,temp_movie);
+        temp_movie =  apply_mc(single(mc_stack_ds_red),row_translation_templates(chunk_ctr)*cur_ones_vec,col_translation_templates(chunk_ctr)*cur_ones_vec);
+        mc_image_stack_full_red =cat(3,mc_image_stack_full_red,temp_movie);
+    end
+    
     end
 
-    end
+%     disp([chunk_ctr size(mc_image_stack_full,3)])
 
-    % Tiff chunking and final save
     if movie_ctr==num_files_per_movie || chunk_ctr==num_chunks
-        % ... [Internal averaging logic here] ...
+        mc_image_stack_full_for_avgs = cat(3,prev_for_avgs,mc_image_stack_full);
+        cur_avgs_to_make = floor(size(mc_image_stack_full_for_avgs,3)/avg_frame_lim);
+        avgs_ctr=0;
+        for avgs_ctr=1:cur_avgs_to_make
+            avg_movie(:,:,total_avg_frame_ctr) = mean(mc_image_stack_full_for_avgs(:,:,(avgs_ctr-1)*avg_frame_lim+1:avgs_ctr*avg_frame_lim),3);
+            total_avg_frame_ctr=total_avg_frame_ctr+1;
+        end
+        prev_for_avgs=mc_image_stack_full_for_avgs(:,:,avgs_ctr*avg_frame_lim+1:end);
+        if chunk_ctr==num_chunks && size(prev_for_avgs,3)>50
+            avg_movie(:,:,total_avg_frame_ctr) = mean(prev_for_avgs,3);
+        end
+        
         
         mc_image_stack_full=mc_image_stack_full(max_shift+1:end-max_shift,max_shift+1:end-max_shift,:);
-        save_name = [output_folder,'mc_image_stack_full_patch_problem_',num2str(patch_ctr)];
-        if chunk_ctr==num_chunks && savechunk_ctr==1; saveastiff(mc_image_stack_full,[save_name,'.tif']);
-        else; saveastiff(mc_image_stack_full,[save_name,'_part',num2str(savechunk_ctr),'.tif']); end
+        if chunk_ctr==num_chunks && savechunk_ctr==1
+            saveastiff(mc_image_stack_full,[output_folder,'mc_image_stack_full_problem_patch_',num2str(patch_ctr),'.tif']);
+        else
+            saveastiff(mc_image_stack_full,[output_folder,'mc_image_stack_full_problem_patch_',num2str(patch_ctr),'_part',num2str(savechunk_ctr),'.tif']);
+        end
 
         if want_red_channel
             mc_image_stack_full_red=mc_image_stack_full_red(max_shift+1:end-max_shift,max_shift+1:end-max_shift,:);
-            save_name_red = [output_folder,'mc_image_stack_red_full_patch_problem_',num2str(patch_ctr)];
-            if chunk_ctr==num_chunks && savechunk_ctr==1; saveastiff(mc_image_stack_full_red,[save_name_red,'.tif']);
-            else; saveastiff(mc_image_stack_full_red,[save_name_red,'_part',num2str(savechunk_ctr),'.tif']); end
+            if chunk_ctr==num_chunks && savechunk_ctr==1
+                saveastiff(mc_image_stack_full_red,[output_folder,'mc_image_stack_red_full_problem_patch_',num2str(patch_ctr),'.tif']);
+            else
+                saveastiff(mc_image_stack_full_red,[output_folder,'mc_image_stack_red_full_problem_patch_',num2str(patch_ctr),'_part',num2str(savechunk_ctr),'.tif']);
+            end
         end
         
-        movie_ctr=1; savechunk_ctr=savechunk_ctr+1;
-        mc_image_stack_full = []; mc_image_stack_full_red = [];
+        disp(['Saved movie ',num2str(savechunk_ctr),' of ',num2str(est_num_movies)])
+        movie_ctr=1;
+        savechunk_ctr=savechunk_ctr+1;
+        mc_image_stack_full = [];
+        mc_image_stack_full_red = [];
     else
         movie_ctr=movie_ctr+1;
     end
+    
+    
 end
 
-% Finalize
-% save([output_folder,'res_mc_data_',num2str(patch_ctr),'.mat'],'res');
-% make_ds5_movie(output_folder,patch_ctr);
-disp(['Entire procedure for patch ',num2str(patch_ctr),' took ',num2str(toc(all_patch_time)),' seconds']);
+saveastiff(single(avg_movie),[output_folder,'mc_image_stack_full_problem_patch_',num2str(patch_ctr),'_AVG_',num2str(avg_frame_lim),'.tif']);  
 
-end
+res.row_post_extraction_shift = row_translation_templates;
+res.col_post_extraction_shift = col_translation_templates;
+save([output_folder,'res_mc_data_problem_',num2str(patch_ctr),'.mat'],'res');
+disp(['Reloading files, applying global motion correction and saving took ',num2str(toc(mc_save_time_template)),' seconds']);
+
+
+disp(['Entire procedure for patch ',num2str(patch_ctr),' (',patch_struct.strName,') took ',num2str(toc(all_patch_time)),' seconds']);
+
+%  disp('Now saving ds5 movie...')
+%  make_ds5_movie(output_folder,patch_ctr,'mc_image_stack_full_problem_patch_');
+%  disp(['DS5 movie for patch ',num2str(patch_ctr),' (',patch_struct.strName,') took ',num2str(toc),' seconds']);
 
 
 

@@ -70,7 +70,11 @@ for iter_ctr = 1:maxiters
     template=get_med_of_avg_template(stack(:,:,1:max_files_for_mc_template),avg_win);
 
     for i=1:mov_length  
-        curcormat = normxcorr222(template(max_shift+1:end-max_shift,max_shift+1:end-max_shift), stack(:,:,i));     
+        if canUseGPU
+            curcormat = normxcorr222(template(max_shift+1:end-max_shift,max_shift+1:end-max_shift), stack(:,:,i));
+        else
+            curcormat = normxcorr2(template(max_shift+1:end-max_shift,max_shift+1:end-max_shift), stack(:,:,i));
+        end
         [szh,szw] = size(template(max_shift+1:end-max_shift,max_shift+1:end-max_shift));
         curcormat=curcormat(szh:end-szh+1,szw:end-szw+1);
         curcormat=rot90(curcormat,2);

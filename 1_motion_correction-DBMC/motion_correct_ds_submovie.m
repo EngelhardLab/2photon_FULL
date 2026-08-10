@@ -33,12 +33,10 @@ if nargin<14
 end
 
 disp('Motion correcting the full movie...')
-try
+
 [first_i_vec,first_j_vec,first_template,first_xcorr_vec,first_iter_ctr,~] = mc_rigid_submovie_from_movie(big_stack,avg_win,maxiters,max_shift,min_shift_error,verbose_flag,...
     return_original,max_files_for_mc_template,roi_size,row_roi_start_vec,col_roi_start_vec,imsize_extract2);
-catch
-disp('')
-end
+
 
 
 big_stack_mc = apply_mc(big_stack,first_i_vec,first_j_vec);

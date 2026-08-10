@@ -62,10 +62,10 @@ for iter_ctr = 1:maxiters
     template=get_med_of_avg_template(stack(:,:,1:max_files_for_mc_template),avg_win);
     for i=1:mov_length
 
-        try
+        if canUseGPU
                curcormat = normxcorr222(template(max_shift+1:end-max_shift,max_shift+1:end-max_shift), stack(:,:,i));
-        catch
-disp('')
+        else
+               curcormat = normxcorr2(template(max_shift+1:end-max_shift,max_shift+1:end-max_shift), stack(:,:,i));
         end
 
         [szh,szw] = size(template(max_shift+1:end-max_shift,max_shift+1:end-max_shift));
@@ -93,7 +93,7 @@ disp('')
     
     total_i_vec=total_i_vec+cur_i_vec;
     total_j_vec=total_j_vec+cur_j_vec;
-    disp('flag end of normx')
+%     disp('flag end of normx')
     cur_error = [mean(abs(cur_i_vec-mean(cur_i_vec))) mean(abs(cur_j_vec-mean(cur_j_vec)))];
     
     curtimesec=toc;
